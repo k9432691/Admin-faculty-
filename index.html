@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JU ENTERPRISE | v30.0 Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: #f8fafc; }
+        .tab-active { background: #1e40af; color: white; border-radius: 12px; }
+        .hidden { display: none !important; }
+        .input-field { width: 100%; padding: 12px; border: 1.5px solid #e2e8f0; border-radius: 12px; outline: none; transition: 0.3s; font-size: 13px; }
+        .input-field:focus { border-color: #1e40af; box-shadow: 0 0 0 4px rgba(30, 64, 175, 0.1); }
+        .card { background: white; border-radius: 1.5rem; border: 1px solid #e2e8f0; }
+        .low-stock { background: #fef2f2; }
+    </style>
+</head>
+<body>
+
+    <div class="hidden">
+        <img id="mainLogo" src="JU_ENTERPRISE_IMG.jpeg" crossorigin="anonymous">
+        <div id="qr_buffer"></div>
+    </div>
+
+    <div id="loginScreen" class="min-h-screen flex items-center justify-center bg-slate-950 p-6">
+        <div class="bg-white p-10 md:p-14 rounded-[3.5rem] w-full max-w-md shadow-2xl text-center">
+            <img src="JU_ENTERPRISE_IMG.jpeg" class="h-24 w-24 mx-auto mb-6 rounded-3xl shadow-xl object-cover" onerror="this.style.display='none'">
+            <h1 class="text-3xl font-black tracking-tighter mb-1">JU ENTERPRISE</h1>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-8">System v30.0 Final</p>
+            <div class="space-y-4">
+                <input type="email" id="loginEmail" placeholder="Access ID" class="input-field">
+                <input type="password" id="loginPass" placeholder="Security Key" class="input-field">
+                <button onclick="handleLogin()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase text-xs hover:bg-blue-700 transition-all">Initialize</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="mainDashboard" class="hidden min-h-screen">
+        <nav class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b px-8 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-8">
+                <img src="JU_ENTERPRISE_IMG.jpeg" class="h-8 rounded" onerror="this.style.display='none'">
+                <div class="flex bg-slate-100 p-1.5 rounded-2xl gap-1 overflow-x-auto">
+                    <button onclick="switchTab('billing')" id="btn-billing" class="px-6 py-2.5 text-[10px] font-black uppercase tab-active">Billing</button>
+                    <button onclick="switchTab('inventory')" id="btn-inventory" class="px-6 py-2.5 text-[10px] font-black uppercase text-slate-500">Inventory</button>
+                    <button onclick="switchTab('payments')" id="btn-payments" class="admin-only px-6 py-2.5 text-[10px] font-black uppercase text-slate-500">Payments</button>
+                    <button onclick="switchTab('intel')" id="btn-intel" class="admin-only px-6 py-2.5 text-[10px] font-black uppercase text-slate-500">Reports</button>
+                </div>
+            </div>
+            <button onclick="handleLogout()" class="text-rose-500 font-black text-[10px] uppercase">Exit</button>
+        </nav>
+
+        <main class="p-8 max-w-[1600px] mx-auto space-y-8">
+            
+            <div id="tab-billing" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div class="lg:col-span-4 space-y-6">
+                    <section class="card p-8">
+                        <h3 class="text-[10px] font-black uppercase text-slate-400 mb-6">Client Data</h3>
+                        <input type="text" id="cName" placeholder="Party Name" class="input-field mb-3 font-bold">
+                        <input type="text" id="cMobile" placeholder="Mobile Number" class="input-field mb-3">
+                        <input type="text" id="cAddr" placeholder="Address" class="input-field mb-3">
+                        <input type="text" id="cGst" placeholder="Party GSTIN" class="input-field uppercase">
+                    </section>
+                    <section class="card p-8">
+                        <h3 class="text-[10px] font-black uppercase text-slate-400 mb-6">Add Product</h3>
+                        <input type="text" id="pSearch" list="stock-list" oninput="autoFetch(this.value)" placeholder="Search Product..." class="input-field mb-4 font-bold border-blue-200">
+                        <datalist id="stock-list"></datalist>
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <input type="number" id="pQty" placeholder="Qty" class="input-field font-bold">
+                            <input type="number" id="pRate" placeholder="Rate ₹" class="input-field font-black text-blue-700">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 mb-6">
+                            <input type="number" id="pDisc" placeholder="Discount %" class="input-field">
+                            <select id="pGst" class="input-field font-bold"><option value="18">18% GST</option><option value="12">12% GST</option><option value="5">5% GST</option><option value="0">0% GST</option></select>
+                        </div>
+                        <button onclick="addToDraft()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-[10px] uppercase hover:bg-black">+ Add to Bill</button>
+                    </section>
+                </div>
+                <div class="lg:col-span-8 space-y-8">
+                    <div class="card overflow-hidden shadow-sm">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400">
+                                <tr><th class="p-5">Product Details</th><th class="p-5 text-center">Qty</th><th class="p-5 text-right">Tax</th><th class="p-5 text-right">Amount</th><th class="p-5"></th></tr>
+                            </thead>
+                            <tbody id="draft-items" class="divide-y"></tbody>
+                        </table>
+                        <div class="p-8 bg-blue-900 text-white flex justify-between items-center">
+                            <div><p class="text-[10px] font-bold opacity-60 uppercase">Final Total</p><h2 id="grandTotal" class="text-5xl font-black">₹0.00</h2></div>
+                            <div class="flex gap-4">
+                                <select id="payMode" class="bg-blue-800 border-none rounded-xl px-6 font-black text-xs uppercase"><option value="Paid">PAID (Cash/Online)</option><option value="Credit">CREDIT (Udhaar)</option></select>
+                                <button onclick="saveInvoice()" id="saveBtn" class="bg-white text-blue-900 px-10 py-4 rounded-2xl font-black text-xs uppercase hover:bg-slate-100">Generate Invoice</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card p-8">
+                        <h3 class="text-[10px] font-black text-slate-400 uppercase mb-6">Recent Sales History</h3>
+                        <table class="w-full text-xs text-left">
+                            <thead class="border-b font-black text-slate-400 uppercase"><tr><th class="py-3">Inv No</th><th>Customer</th><th>Total</th><th>Status</th><th class="text-right">Action</th></tr></thead>
+                            <tbody id="recent-invoices" class="divide-y"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-inventory" class="hidden grid grid-cols-1 lg:grid-cols-4 gap-8">
+                <div class="card p-8 h-fit space-y-5">
+                    <h3 class="text-[10px] font-black uppercase text-blue-700">Add New Stock</h3>
+                    <input type="text" id="sName" placeholder="Product Name" class="input-field font-bold">
+                    <input type="text" id="sHsn" placeholder="HSN Code" class="input-field uppercase">
+                    <div class="grid grid-cols-2 gap-3">
+                        <input type="number" id="sQty" placeholder="Qty" class="input-field font-bold">
+                        <select id="sGst" class="input-field font-bold text-xs"><option value="18">18% GST</option><option value="12">12% GST</option><option value="5">5% GST</option><option value="0">0% GST</option></select>
+                    </div>
+                    <div class="space-y-4 pt-4 border-t border-slate-100">
+                        <div><label class="text-[9px] font-black text-rose-500 uppercase ml-1">Purchase Price (₹)</label><input type="number" id="sPRate" class="input-field font-bold border-rose-100 bg-rose-50"></div>
+                        <div><label class="text-[9px] font-black text-emerald-600 uppercase ml-1">Selling Price (₹)</label><input type="number" id="sSRate" class="input-field font-bold border-emerald-100 bg-emerald-50"></div>
+                    </div>
+                    <button onclick="updateStock()" class="w-full bg-blue-700 text-white py-4 rounded-2xl font-black text-xs uppercase shadow-lg">Save Product</button>
+                </div>
+                <div class="lg:col-span-3 card overflow-hidden">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 border-b text-[10px] font-black text-slate-400 uppercase">
+                            <tr><th class="p-6">Product</th><th class="p-6 text-center">Stock</th><th class="p-6 text-right">Cost ₹</th><th class="p-6 text-right">Sale ₹</th><th class="p-6 text-center">Action</th></tr>
+                        </thead>
+                        <tbody id="stock-table" class="divide-y"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="tab-payments" class="hidden card p-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xs font-black uppercase text-blue-700">Udhaar / Pending Payments</h3>
+                    <h2 id="totalPending" class="text-2xl font-black text-rose-600">Pending: ₹0.00</h2>
+                </div>
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-50 border-b text-[10px] font-black uppercase text-slate-400">
+                        <tr><th class="p-4">Date</th><th class="p-4">Inv No</th><th class="p-4">Customer</th><th class="p-4 text-right">Amount</th><th class="p-4 text-center">Action</th></tr>
+                    </thead>
+                    <tbody id="payment-table" class="divide-y"></tbody>
+                </table>
+            </div>
+
+            <div id="tab-intel" class="hidden space-y-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="card p-10 bg-blue-800 text-white shadow-xl">
+                        <p class="text-[11px] font-bold uppercase opacity-80">DAILY REVENUE (TODAY)</p>
+                        <h2 id="statRev" class="text-5xl font-black mt-2">₹0.00</h2>
+                    </div>
+                    <div class="card p-10 bg-emerald-700 text-white shadow-xl">
+                        <p class="text-[11px] font-bold uppercase opacity-80">DAILY PROFIT (TODAY)</p>
+                        <h2 id="statNet" class="text-5xl font-black mt-2">₹0.00</h2>
+                    </div>
+                    <div class="card p-8 bg-slate-900 flex flex-col justify-center gap-4">
+                        <button onclick="downloadReport('daily')" class="w-full bg-blue-500 text-white py-4 rounded-xl font-black text-[10px] uppercase hover:bg-blue-400 transition-colors">⬇ Daily Report</button>
+                        <button onclick="downloadReport('monthly')" class="w-full bg-emerald-500 text-white py-4 rounded-xl font-black text-[10px] uppercase hover:bg-emerald-400 transition-colors">⬇ Monthly Report</button>
+                    </div>
+                </div>
+                <div class="card overflow-hidden">
+                    <h3 class="p-6 bg-slate-50 border-b text-xs font-black uppercase text-slate-500">Master Ledger (All Transactions)</h3>
+                    <table class="w-full text-xs text-left"><tbody id="ledger-table" class="divide-y"></tbody></table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCd7SVsdxN_lUUEcWcDdQ4ALtHv5gu2QQY",
+            authDomain: "distribution-business-52ece.firebaseapp.com",
+            projectId: "distribution-business-52ece",
+            storageBucket: "distribution-business-52ece.appspot.com",
+            messagingSenderId: "63606443766",
+            appId: "1:63606443766:web:bbdfa953714a831e0526d7"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        let stock = [], draft = [], sales = [], isAdmin = false;
+
+        // --- FIXED DATE FORMATTER ---
+        // Prevents the "0.00" bug by keeping a strict DD/MM/YYYY format everywhere
+        function getCurrentFormattedDate() {
+            const d = new Date();
+            const day = d.getDate().toString().padStart(2, '0');
+            const month = (d.getMonth() + 1).toString().padStart(2, '0');
+            const year = d.getFullYear();
+            return `${day}/${month}/${year}`;
+        }
+
+        // --- AUTH ---
+        function handleLogin() { auth.signInWithEmailAndPassword(document.getElementById('loginEmail').value, document.getElementById('loginPass').value).catch(alert); }
+        function handleLogout() { auth.signOut(); }
+
+        auth.onAuthStateChanged(user => {
+            if(user) {
+                isAdmin = user.email === 'admin@ju.com';
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('mainDashboard').classList.remove('hidden');
+                document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin));
+                syncAllData();
+            } else {
+                document.getElementById('loginScreen').classList.remove('hidden');
+                document.getElementById('mainDashboard').classList.add('hidden');
+            }
+        });
+
+        // --- REAL-TIME SYNC ---
+        function syncAllData() {
+            db.collection("inventory").onSnapshot(snap => {
+                stock = snap.docs.map(d => ({...d.data(), id: d.id}));
+                renderStock();
+                document.getElementById('stock-list').innerHTML = stock.map(s => `<option value="${s.name}">`).join('');
+            });
+
+            db.collection("transactions").onSnapshot(snap => {
+                sales = snap.docs.map(d => ({...d.data(), id: d.id}));
+                sales.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)); // Latest first
+                renderRecentHistory();
+                updateReportsUI();
+                renderPaymentTracking();
+            });
+        }
+
+        function getFYPrefix() {
+            const d = new Date();
+            const year = d.getFullYear();
+            const month = d.getMonth() + 1; 
+            const startYear = month >= 4 ? year : year - 1;
+            return `${startYear.toString().slice(-2)}-${(startYear + 1).toString().slice(-2)}`;
+        }
+
+        // --- UI RENDERERS ---
+        function updateReportsUI() {
+            const todayStr = getCurrentFormattedDate();
+            let dailyRev = 0, dailyProfit = 0;
+            const ledger = document.getElementById('ledger-table');
+            ledger.innerHTML = '';
+
+            sales.forEach(s => {
+                const sTotal = parseFloat(s.total || 0);
+                const sProfit = parseFloat(s.profit || 0);
+                
+                // Fixed Check: Will accurately calculate Daily totals now
+                if(s.date === todayStr) {
+                    dailyRev += sTotal;
+                    dailyProfit += sProfit;
+                }
+
+                ledger.innerHTML += `<tr>
+                    <td class="p-4 font-bold text-slate-500">${s.date}</td>
+                    <td class="p-4 font-black text-blue-700">${s.invNo}</td>
+                    <td class="p-4 uppercase">${s.party} <span class="text-[9px] ml-2 px-2 py-0.5 rounded-full ${s.mode === 'Paid' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}">${s.mode}</span></td>
+                    <td class="p-4 text-right font-bold">₹${sTotal.toFixed(2)}</td>
+                    <td class="p-4 text-right font-black text-emerald-600">₹${sProfit.toFixed(2)}</td>
+                </tr>`;
+            });
+
+            document.getElementById('statRev').innerText = `₹${dailyRev.toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
+            document.getElementById('statNet').innerText = `₹${dailyProfit.toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
+        }
+
+        function renderPaymentTracking() {
+            const pt = document.getElementById('payment-table'); pt.innerHTML = '';
+            let totalPending = 0;
+
+            // Shows only Udhaar/Credit records
+            sales.filter(s => s.mode === 'Credit').forEach(s => {
+                totalPending += parseFloat(s.total || 0);
+                pt.innerHTML += `<tr>
+                    <td class="p-4 text-xs font-bold text-slate-500">${s.date}</td>
+                    <td class="p-4 text-xs font-black text-blue-700">${s.invNo}</td>
+                    <td class="p-4 text-xs uppercase font-bold">${s.party}<br><span class="text-[9px] text-slate-400">Mob: ${s.mobile || 'N/A'}</span></td>
+                    <td class="p-4 text-right font-black text-rose-600">₹${s.total}</td>
+                    <td class="p-4 text-center"><button onclick="markAsPaid('${s.id}')" class="bg-emerald-500 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-600 shadow-md">Mark Paid</button></td>
+                </tr>`;
+            });
+            document.getElementById('totalPending').innerText = `Pending: ₹${totalPending.toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
+        }
+
+        async function markAsPaid(id) {
+            if(confirm("Payment Received? Mark as Paid.")) {
+                await db.collection("transactions").doc(id).update({ mode: 'Paid' });
+            }
+        }
+
+        function renderStock() {
+            const b = document.getElementById('stock-table'); b.innerHTML = '';
+            stock.forEach(s => {
+                const isLow = s.qty <= 5;
+                b.innerHTML += `<tr class="${isLow ? 'low-stock' : 'hover:bg-slate-50'}">
+                    <td class="p-6 font-bold text-xs">${s.name} ${isLow ? '<span class="ml-2 text-[8px] bg-rose-500 text-white px-2 py-1 rounded-full uppercase">Low Stock</span>' : ''}</td>
+                    <td class="p-6 text-center font-black ${isLow ? 'text-rose-600' : ''}">${s.qty}</td>
+                    <td class="p-6 text-right font-bold text-slate-400">₹${s.pRate}</td><td class="p-6 text-right font-black text-blue-700">₹${s.sRate}</td>
+                    <td class="p-6 text-center"><button onclick="deleteStock('${s.id}')" class="text-rose-500 font-bold text-xs hover:underline">Delete</button></td>
+                </tr>`;
+            });
+        }
+
+        function renderRecentHistory() {
+            const b = document.getElementById('recent-invoices'); b.innerHTML = '';
+            sales.slice(0, 6).forEach(s => {
+                b.innerHTML += `<tr class="hover:bg-slate-50">
+                    <td class="py-4 px-2 font-bold text-blue-700">${s.invNo}</td>
+                    <td class="px-2 uppercase font-bold text-slate-600">${s.party}</td>
+                    <td class="px-2 font-black">₹${s.total}</td>
+                    <td class="px-2"><span class="text-[9px] font-black px-2 py-1 rounded-full ${s.mode === 'Paid' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}">${s.mode}</span></td>
+                    <td class="text-right px-2">
+                        <button onclick="printInvoice('${s.id}')" class="text-blue-600 font-bold mr-3 hover:underline">Print</button>
+                        <button onclick="deleteInvoice('${s.id}')" class="admin-only text-rose-500 font-bold hover:underline">Delete</button>
+                    </td>
+                </tr>`;
+            });
+        }
+
+        // --- BILLING LOGIC ---
+        function autoFetch(val) {
+            const it = stock.find(s => s.name === val);
+            if(it) {
+                // Rate fetched properly here
+                document.getElementById('pRate').value = it.sRate || 0;
+                document.getElementById('pGst').value = it.gst || '0'; 
+                document.getElementById('pQty').focus();
+            }
+        }
+
+        function addToDraft() {
+            const name = document.getElementById('pSearch').value;
+            const qty = Number(document.getElementById('pQty').value);
+            const rate = Number(document.getElementById('pRate').value);
+            const s = stock.find(x => x.name === name);
+
+            if(!s) return alert("Product not found!");
+            if(qty <= 0) return alert("Enter valid quantity!");
+            if(qty > s.qty) return alert(`Not enough stock! Only ${s.qty} available.`);
+
+            const disc = Number(document.getElementById('pDisc').value || 0);
+            const gst = Number(document.getElementById('pGst').value);
+            
+            const priceAD = rate - (rate * (disc/100));
+            const total = (priceAD + (priceAD * gst/100)) * qty;
+            const profit = (priceAD - s.pRate) * qty;
+
+            draft.push({ name, qty, rate, disc, gst, total, hsn: s.hsn, profit });
+            renderDraft();
+            ['pSearch','pQty','pRate','pDisc'].forEach(id => document.getElementById(id).value = '');
+        }
+
+        function renderDraft() {
+            const b = document.getElementById('draft-items'); b.innerHTML = '';
+            let t = 0;
+            draft.forEach((it, i) => {
+                t += it.total;
+                b.innerHTML += `<tr>
+                    <td class="p-4 font-bold text-xs">${it.name}<br><span class="text-[9px] text-slate-400">HSN: ${it.hsn}</span></td>
+                    <td class="p-4 text-center font-bold text-xs">${it.qty}</td>
+                    <td class="p-4 text-right text-[10px] text-slate-400">${it.gst}%</td>
+                    <td class="p-4 text-right font-black text-blue-700 text-xs">₹${it.total.toFixed(2)}</td>
+                    <td class="p-4 text-center"><button onclick="draft.splice(${i},1);renderDraft()" class="text-rose-400 font-bold hover:scale-110">✕</button></td>
+                </tr>`;
+            });
+            document.getElementById('grandTotal').innerText = `₹${t.toFixed(2)}`;
+        }
+
+        async function saveInvoice() {
+            const party = document.getElementById('cName').value;
+            if(!party || draft.length === 0) return alert("Fill Party Details & Add Items!");
+            const btn = document.getElementById('saveBtn'); btn.disabled = true; btn.innerText = "Processing...";
+
+            const fyStr = getFYPrefix();
+            const fySales = sales.filter(s => s.invNo.includes(`JU/${fyStr}/`));
+            const invNo = `JU/${fyStr}/${(fySales.length + 1).toString().padStart(3, '0')}`;
+
+            const invData = {
+                invNo, party,
+                mobile: document.getElementById('cMobile').value || "",
+                pAddr: document.getElementById('cAddr').value || "",
+                pGst: document.getElementById('cGst').value || "URD",
+                items: draft,
+                total: draft.reduce((a,b)=>a+b.total,0).toFixed(2),
+                profit: draft.reduce((a,b)=>a+b.profit,0).toFixed(2),
+                mode: document.getElementById('payMode').value,
+                date: getCurrentFormattedDate(), // Strict date format
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            for(let it of draft) {
+                const ref = db.collection("inventory").doc(it.name);
+                const sn = await ref.get();
+                if(sn.exists) await ref.update({ qty: sn.data().qty - it.qty });
+            }
+
+            const res = await db.collection("transactions").add(invData);
+            await printInvoice(res.id);
+            
+            draft = []; renderDraft();
+            ['cName','cMobile','cAddr','cGst'].forEach(id => document.getElementById(id).value = '');
+            btn.disabled = false; btn.innerText = "Generate Invoice";
+        }
+
+        // --- PDF ENGINE ---
+        async function printInvoice(id) {
+            const d = sales.find(x => x.id === id);
+            if(!d) return;
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            doc.setFillColor(15, 23, 42); doc.rect(0, 0, 210, 42, 'F');
+            doc.setTextColor(255); doc.setFontSize(18); doc.setFont("helvetica", "bold");
+            doc.text("TAX INVOICE", 105, 15, { align: 'center' });
+            doc.setFontSize(14); doc.text("JU ENTERPRISE", 15, 25);
+            doc.setFontSize(9); doc.setFont("helvetica", "normal");
+            doc.text("Guwahati, Assam | GST: 18MCPPS0770N1ZH | Contact: 7002217037", 15, 32);
+
+            doc.setTextColor(40);
+            doc.autoTable({
+                startY: 48,
+                body: [
+                    [`BILL TO: ${d.party}`, `INVOICE NO: ${d.invNo}`],
+                    [`Mobile: ${d.mobile || 'N/A'}`, `DATE: ${d.date}`],
+                    [`Address: ${d.pAddr}`, `STATUS: ${d.mode.toUpperCase()}`],
+                    [`GST: ${d.pGst}`, ``]
+                ],
+                theme: 'plain', styles: { fontSize: 9, cellPadding: 1 }
+            });
+
+            doc.autoTable({
+                startY: 75,
+                head: [['#', 'Description', 'HSN', 'Qty', 'Rate', 'Tax', 'Total']],
+                body: d.items.map((i,idx) => [idx+1, i.name, i.hsn, i.qty, i.rate, i.gst+'%', '₹'+parseFloat(i.total).toFixed(2)]),
+                headStyles: { fillColor: [30, 41, 59] },
+                styles: { fontSize: 8, halign: 'center' },
+                columnStyles: { 1: { halign: 'left' }, 6: { halign: 'right', fontStyle: 'bold' } }
+            });
+
+            const fY = doc.lastAutoTable.finalY + 15;
+            doc.setFontSize(12); doc.setFont("helvetica", "bold");
+            doc.text(`GRAND TOTAL: Rs. ${d.total}`, 195, fY, { align: 'right' });
+
+            const qrBuf = document.getElementById("qr_buffer"); 
+            qrBuf.innerHTML = "";
+            new QRCode(qrBuf, { text: `upi://pay?pa=sarmakaushik55-1@okaxis&pn=JU&am=${d.total}`, width: 100, height: 100 });
+            
+            await new Promise(r => setTimeout(r, 1200));
+            const canvas = qrBuf.querySelector('canvas');
+            if(canvas) doc.addImage(canvas.toDataURL("image/png"), 'PNG', 15, fY - 10, 30, 30);
+            
+            doc.save(`${d.invNo.replace(/\//g,'-')}.pdf`);
+        }
+
+        // --- DB ACTIONS ---
+        async function deleteInvoice(id) { if(confirm("Permanently delete this invoice?")) await db.collection("transactions").doc(id).delete(); }
+        async function deleteStock(id) { if(confirm("Delete this product from inventory?")) await db.collection("inventory").doc(id).delete(); }
+
+        async function updateStock() {
+            const n = document.getElementById('sName').value;
+            if(!n) return;
+            // Always Visible Inputs are now accessible
+            await db.collection("inventory").doc(n).set({
+                name: n, 
+                hsn: document.getElementById('sHsn').value,
+                qty: Number(document.getElementById('sQty').value),
+                gst: document.getElementById('sGst').value,
+                pRate: Number(document.getElementById('sPRate').value || 0),
+                sRate: Number(document.getElementById('sSRate').value || 0)
+            });
+            ['sName','sHsn','sQty','sPRate','sSRate'].forEach(id => document.getElementById(id).value = '');
+        }
+
+        function downloadReport(type) {
+            let csv = "Invoice No,Date,Customer,Mobile,Amount,Profit,Status\n";
+            const todayStr = getCurrentFormattedDate(); // "DD/MM/YYYY"
+            const currentMonth = todayStr.split('/')[1]; 
+            const currentYear = todayStr.split('/')[2];  
+            
+            sales.forEach(s => {
+                let include = false;
+                if(type === 'daily' && s.date === todayStr) include = true;
+                if(type === 'monthly') {
+                    const sMonth = s.date.split('/')[1];
+                    const sYear = s.date.split('/')[2];
+                    if(sMonth === currentMonth && sYear === currentYear) include = true;
+                }
+
+                if(include) {
+                    csv += `${s.invNo},${s.date},${s.party},${s.mobile || 'N/A'},${s.total},${s.profit},${s.mode}\n`;
+                }
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; 
+            a.download = `JU_${type.toUpperCase()}_Report.csv`; 
+            a.click();
+        }
+
+        function switchTab(t) {
+            ['billing','inventory','payments','intel'].forEach(id => {
+                const el = document.getElementById('tab-'+id);
+                if(el) el.classList.toggle('hidden', id !== t);
+                const btn = document.getElementById('btn-'+id);
+                if(btn) btn.className = id === t ? 'px-6 py-2.5 text-[10px] font-black uppercase tab-active' : 'px-6 py-2.5 text-[10px] font-black uppercase text-slate-500';
+            });
+        }
+    </script>
+</body>
+</html>
