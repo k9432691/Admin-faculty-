@@ -1,13 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <link rel="manifest" href="manifest.json">
-
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js');
-  }
-</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JU ENTERPRISE | v30.0 Pro</title>
@@ -69,8 +62,9 @@
                 <div class="lg:col-span-4 space-y-6">
                     <section class="card p-8">
                         <h3 class="text-[10px] font-black uppercase text-slate-400 mb-6">Client Data</h3>
+                        <input type="hidden" id="editInvId" value="">
                         <input type="text" id="cName" placeholder="Party Name" class="input-field mb-3 font-bold">
-                        <input type="text" id="cMobile" placeholder="Mobile Number" class="input-field mb-3">
+                        <input type="text" id="cMobile" placeholder="Mobile Number (10 digits)" class="input-field mb-3">
                         <input type="text" id="cAddr" placeholder="Address" class="input-field mb-3">
                         <input type="text" id="cGst" placeholder="Party GSTIN" class="input-field uppercase">
                     </section>
@@ -117,7 +111,7 @@
 
             <div id="tab-inventory" class="hidden grid grid-cols-1 lg:grid-cols-4 gap-8">
                 <div class="card p-8 h-fit space-y-5">
-                    <h3 class="text-[10px] font-black uppercase text-blue-700">Add New Stock</h3>
+                    <h3 class="text-[10px] font-black uppercase text-blue-700">Add/Edit Stock</h3>
                     <input type="text" id="sName" placeholder="Product Name" class="input-field font-bold">
                     <input type="text" id="sHsn" placeholder="HSN Code" class="input-field uppercase">
                     <div class="grid grid-cols-2 gap-3">
@@ -191,8 +185,6 @@
 
         let stock = [], draft = [], sales = [], isAdmin = false;
 
-        // --- FIXED DATE FORMATTER ---
-        // Prevents the "0.00" bug by keeping a strict DD/MM/YYYY format everywhere
         function getCurrentFormattedDate() {
             const d = new Date();
             const day = d.getDate().toString().padStart(2, '0');
@@ -201,7 +193,6 @@
             return `${day}/${month}/${year}`;
         }
 
-        // --- AUTH ---
         function handleLogin() { auth.signInWithEmailAndPassword(document.getElementById('loginEmail').value, document.getElementById('loginPass').value).catch(alert); }
         function handleLogout() { auth.signOut(); }
 
@@ -218,7 +209,6 @@
             }
         });
 
-        // --- REAL-TIME SYNC ---
         function syncAllData() {
             db.collection("inventory").onSnapshot(snap => {
                 stock = snap.docs.map(d => ({...d.data(), id: d.id}));
@@ -228,7 +218,7 @@
 
             db.collection("transactions").onSnapshot(snap => {
                 sales = snap.docs.map(d => ({...d.data(), id: d.id}));
-                sales.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)); // Latest first
+                sales.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
                 renderRecentHistory();
                 updateReportsUI();
                 renderPaymentTracking();
@@ -243,7 +233,6 @@
             return `${startYear.toString().slice(-2)}-${(startYear + 1).toString().slice(-2)}`;
         }
 
-        // --- UI RENDERERS ---
         function updateReportsUI() {
             const todayStr = getCurrentFormattedDate();
             let dailyRev = 0, dailyProfit = 0;
@@ -254,7 +243,6 @@
                 const sTotal = parseFloat(s.total || 0);
                 const sProfit = parseFloat(s.profit || 0);
                 
-                // Fixed Check: Will accurately calculate Daily totals now
                 if(s.date === todayStr) {
                     dailyRev += sTotal;
                     dailyProfit += sProfit;
@@ -277,7 +265,6 @@
             const pt = document.getElementById('payment-table'); pt.innerHTML = '';
             let totalPending = 0;
 
-            // Shows only Udhaar/Credit records
             sales.filter(s => s.mode === 'Credit').forEach(s => {
                 totalPending += parseFloat(s.total || 0);
                 pt.innerHTML += `<tr>
@@ -305,9 +292,25 @@
                     <td class="p-6 font-bold text-xs">${s.name} ${isLow ? '<span class="ml-2 text-[8px] bg-rose-500 text-white px-2 py-1 rounded-full uppercase">Low Stock</span>' : ''}</td>
                     <td class="p-6 text-center font-black ${isLow ? 'text-rose-600' : ''}">${s.qty}</td>
                     <td class="p-6 text-right font-bold text-slate-400">₹${s.pRate}</td><td class="p-6 text-right font-black text-blue-700">₹${s.sRate}</td>
-                    <td class="p-6 text-center"><button onclick="deleteStock('${s.id}')" class="text-rose-500 font-bold text-xs hover:underline">Delete</button></td>
+                    <td class="p-6 text-center flex justify-center gap-2">
+                        <button onclick="editStock('${s.id}')" class="text-blue-500 font-bold text-xs hover:underline">Edit</button>
+                        <button onclick="deleteStock('${s.id}')" class="text-rose-500 font-bold text-xs hover:underline">Delete</button>
+                    </td>
                 </tr>`;
             });
+        }
+
+        function editStock(id) {
+            const s = stock.find(x => x.id === id);
+            if(s) {
+                document.getElementById('sName').value = s.name;
+                document.getElementById('sHsn').value = s.hsn || '';
+                document.getElementById('sQty').value = s.qty;
+                document.getElementById('sGst').value = s.gst || '0';
+                document.getElementById('sPRate').value = s.pRate || 0;
+                document.getElementById('sSRate').value = s.sRate || 0;
+                window.scrollTo(0,0);
+            }
         }
 
         function renderRecentHistory() {
@@ -318,19 +321,73 @@
                     <td class="px-2 uppercase font-bold text-slate-600">${s.party}</td>
                     <td class="px-2 font-black">₹${s.total}</td>
                     <td class="px-2"><span class="text-[9px] font-black px-2 py-1 rounded-full ${s.mode === 'Paid' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}">${s.mode}</span></td>
-                    <td class="text-right px-2">
-                        <button onclick="printInvoice('${s.id}')" class="text-blue-600 font-bold mr-3 hover:underline">Print</button>
-                        <button onclick="deleteInvoice('${s.id}')" class="admin-only text-rose-500 font-bold hover:underline">Delete</button>
+                    <td class="text-right px-2 flex justify-end gap-3 mt-3">
+                        <button onclick="sendWhatsApp('${s.id}')" class="text-emerald-500 font-bold text-[10px] uppercase hover:underline">WA</button>
+                        <button onclick="editInvoice('${s.id}')" class="text-orange-500 font-bold text-[10px] uppercase hover:underline">Edit</button>
+                        <button onclick="printInvoice('${s.id}')" class="text-blue-600 font-bold text-[10px] uppercase hover:underline">Print</button>
+                        <button onclick="deleteInvoice('${s.id}')" class="admin-only text-rose-500 font-bold text-[10px] uppercase hover:underline">Delete</button>
                     </td>
                 </tr>`;
             });
         }
 
-        // --- BILLING LOGIC ---
+        // --- NEW WHATSAPP FEATURE ---
+        function sendWhatsApp(invoiceObjOrId) {
+            let d = typeof invoiceObjOrId === 'string' ? sales.find(x => x.id === invoiceObjOrId) : invoiceObjOrId;
+            if(!d) return;
+
+            if(!d.mobile || d.mobile.length < 10) {
+                alert("Valid Mobile Number is required to send WhatsApp!");
+                return;
+            }
+
+            let phone = d.mobile;
+            if(phone.length === 10) phone = "91" + phone; // Add India code if 10 digits
+
+            let msg = `*JU ENTERPRISE - INVOICE*\n\n`;
+            msg += `Hello *${d.party}*,\n`;
+            msg += `Here is your bill summary:\n\n`;
+            msg += `🧾 *Inv No:* ${d.invNo}\n`;
+            msg += `📅 *Date:* ${d.date}\n\n`;
+            msg += `*Items:*\n`;
+            
+            d.items.forEach((item, idx) => {
+                msg += `${idx + 1}. ${item.name} (x${item.qty}) - ₹${item.total.toFixed(2)}\n`;
+            });
+            
+            msg += `\n💰 *Grand Total: ₹${d.total}*\n`;
+            msg += `🏷️ *Status:* ${d.mode}\n\n`;
+            
+            if(d.mode === 'Credit') {
+                msg += `Please pay via UPI: upi://pay?pa=sarmakaushik55-1@okaxis&pn=JU&am=${d.total}\n\n`;
+            }
+
+            msg += `Thank you for your business!`;
+
+            const waLink = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+            window.open(waLink, '_blank');
+        }
+
+        async function editInvoice(id) {
+            const s = sales.find(x => x.id === id);
+            if(!s) return;
+            if(!confirm("Warning: This will reload the invoice data into the form. You should delete the old invoice after saving the new one to avoid duplicates. Proceed?")) return;
+
+            document.getElementById('cName').value = s.party;
+            document.getElementById('cMobile').value = s.mobile || '';
+            document.getElementById('cAddr').value = s.pAddr || '';
+            document.getElementById('cGst').value = s.pGst || '';
+            document.getElementById('payMode').value = s.mode;
+            document.getElementById('editInvId').value = s.id; 
+
+            draft = [...s.items]; 
+            renderDraft();
+            window.scrollTo(0,0);
+        }
+
         function autoFetch(val) {
             const it = stock.find(s => s.name === val);
             if(it) {
-                // Rate fetched properly here
                 document.getElementById('pRate').value = it.sRate || 0;
                 document.getElementById('pGst').value = it.gst || '0'; 
                 document.getElementById('pQty').focus();
@@ -380,9 +437,19 @@
             if(!party || draft.length === 0) return alert("Fill Party Details & Add Items!");
             const btn = document.getElementById('saveBtn'); btn.disabled = true; btn.innerText = "Processing...";
 
-            const fyStr = getFYPrefix();
-            const fySales = sales.filter(s => s.invNo.includes(`JU/${fyStr}/`));
-            const invNo = `JU/${fyStr}/${(fySales.length + 1).toString().padStart(3, '0')}`;
+            const editId = document.getElementById('editInvId').value;
+            let invNo = "";
+
+            if(editId) {
+                const oldInv = sales.find(x => x.id === editId);
+                invNo = oldInv.invNo;
+                await db.collection("transactions").doc(editId).delete();
+                document.getElementById('editInvId').value = ""; 
+            } else {
+                const fyStr = getFYPrefix();
+                const fySales = sales.filter(s => s.invNo.includes(`JU/${fyStr}/`));
+                invNo = `JU/${fyStr}/${(fySales.length + 1).toString().padStart(3, '0')}`;
+            }
 
             const invData = {
                 invNo, party,
@@ -393,25 +460,35 @@
                 total: draft.reduce((a,b)=>a+b.total,0).toFixed(2),
                 profit: draft.reduce((a,b)=>a+b.profit,0).toFixed(2),
                 mode: document.getElementById('payMode').value,
-                date: getCurrentFormattedDate(), // Strict date format
+                date: getCurrentFormattedDate(), 
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             };
 
             for(let it of draft) {
                 const ref = db.collection("inventory").doc(it.name);
                 const sn = await ref.get();
-                if(sn.exists) await ref.update({ qty: sn.data().qty - it.qty });
+                if(sn.exists && !editId) { 
+                    await ref.update({ qty: sn.data().qty - it.qty });
+                }
             }
 
             const res = await db.collection("transactions").add(invData);
+            invData.id = res.id; // temporary ID assign for whatsapp object
+
             await printInvoice(res.id);
+            
+            // WHATSAPP AUTO PROMPT
+            if(invData.mobile && invData.mobile.length >= 10) {
+                if(confirm("Invoice Saved! Do you want to send the summary via WhatsApp?")) {
+                    sendWhatsApp(invData);
+                }
+            }
             
             draft = []; renderDraft();
             ['cName','cMobile','cAddr','cGst'].forEach(id => document.getElementById(id).value = '');
             btn.disabled = false; btn.innerText = "Generate Invoice";
         }
 
-        // --- PDF ENGINE ---
         async function printInvoice(id) {
             const d = sales.find(x => x.id === id);
             if(!d) return;
@@ -462,14 +539,12 @@
             doc.save(`${d.invNo.replace(/\//g,'-')}.pdf`);
         }
 
-        // --- DB ACTIONS ---
         async function deleteInvoice(id) { if(confirm("Permanently delete this invoice?")) await db.collection("transactions").doc(id).delete(); }
         async function deleteStock(id) { if(confirm("Delete this product from inventory?")) await db.collection("inventory").doc(id).delete(); }
 
         async function updateStock() {
             const n = document.getElementById('sName').value;
             if(!n) return;
-            // Always Visible Inputs are now accessible
             await db.collection("inventory").doc(n).set({
                 name: n, 
                 hsn: document.getElementById('sHsn').value,
@@ -483,7 +558,7 @@
 
         function downloadReport(type) {
             let csv = "Invoice No,Date,Customer,Mobile,Amount,Profit,Status\n";
-            const todayStr = getCurrentFormattedDate(); // "DD/MM/YYYY"
+            const todayStr = getCurrentFormattedDate(); 
             const currentMonth = todayStr.split('/')[1]; 
             const currentYear = todayStr.split('/')[2];  
             
@@ -518,5 +593,4 @@
         }
     </script>
 </body>
-
 </html>
